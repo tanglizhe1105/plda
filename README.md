@@ -1,3 +1,5 @@
+This plda runs lda on mpi with distributed way, can print doc loglikelihood and output the doc-topic result(infer)
+
 WELCOME TO PLDA+!
 
 Introduction
