@@ -273,22 +273,21 @@ int main(int argc, char** argv) {
 
     // Do iteration
     PLDAPLUSSampler sampler(flags.alpha_, flags.beta_, &model_pd, NULL);
-    for (int i = 0; i < flags.total_iterations_; ++i) {
-      //tlz print out doc loglikelihood
+    for (int i = 0; i < flags.total_iterations_; ++i) {	  
+	  //tlz print out doc loglikelihood
 	  if(flags.compute_likelihood_ == "true"){
-	  	if(i != 0 && i % 5 == 0){
+	  	if(i % 1 == 0){
 			double loglikelihood_local = 0;
       		double loglikelihood_global = 0;
 			for (LDACorpus::iterator iter = lda_corpus->begin(); iter != lda_corpus->end(); ++iter) {
-				loglikelihood_local += sampler.LogLikelihood(*iter);
+				loglikelihood_local += sampler.ComputeOneDocLLH(*iter);
 			}
 			MPI_Allreduce(&loglikelihood_local, &loglikelihood_global, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_PD);
 			if (myid == pwnum)
 		  		printf("[%s] : Rank %d : iteration %d : loglikelihood %e\n", getCurTime(tm), myid, i, loglikelihood_global);
 	  	}
-	  }
+	  } //end if
 	  printf("[%s] : Rank %d : iteration %d\n", getCurTime(tm), myid, i);
-	  //tlz
       sampler.DoIteration(&pldaplus_corpus, true, false);
     }
 

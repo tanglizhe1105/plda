@@ -69,6 +69,9 @@ class LDASampler {
 
   // Computes the log likelihood of a document.
   double LogLikelihood(LDADocument* document) const;
+  // Computes the log likelihood of a document.
+  double ComputeOneDocLLH(LDADocument* document) const;
+  
 
  protected:
   const double alpha_;
