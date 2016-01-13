@@ -1,4 +1,7 @@
-This plda runs lda on mpi with distributed way, can print doc loglikelihood and output the doc-topic result(infer)
+We implement loglikelihood compution on another algorithm, the rsult of loglikelihood is increase by the iteration.
+The origin code loglikelihood value is decrease by iteration, the experience show the computing way is wrong once by once. Beliving me or beliving authoritativeness is up to yourself. You can test as much as you like.
+
+
 
 WELCOME TO PLDA+!
 

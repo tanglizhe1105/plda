@@ -19,6 +19,30 @@
 #include "document.h"
 #include "model.h"
 
+namespace
+{
+    const double cof[6] = 
+    { 
+        76.18009172947146, -86.50532032941677,
+        24.01409824083091, -1.231739572450155,
+        0.1208650973866179e-2, -0.5395239384953e-5
+    };
+
+    double LogGamma(double xx)
+    {
+        int j;
+        double x, y, tmp1, ser;
+        y = xx;
+        x = xx;
+        tmp1 = x + 5.5;
+        tmp1 -= (x + 0.5)*log(tmp1);
+        ser = 1.000000000190015;
+        for (j = 0; j < 6; j++) ser += cof[j] / ++y;
+        return -tmp1 + log(2.5066282746310005*ser / x);
+    }
+}
+
+
 namespace learning_lda {
 
 LDASampler::LDASampler(double alpha,
@@ -164,5 +188,36 @@ double LDASampler::LogLikelihood(LDADocument* document) const {
   }
   return log_likelihood;
 }
+
+double LDASampler::ComputeOneDocLLH(LDADocument* document) const {
+  const int num_topics(model_->num_topics());
+  
+  const vector<int64>& document_topic_cooccurrences(
+      document->topic_distribution());
+  CHECK_EQ(num_topics, document_topic_cooccurrences.size());
+  
+  int64 document_length = 0;
+  for (int t = 0; t < num_topics; ++t) {
+    document_length += document_topic_cooccurrences[t];
+  }
+  if(document_length == 0)
+  	return 0.0;
+
+  double log_likelihood = LogGamma(num_topics * alpha_) - num_topics * LogGamma(alpha_);
+  int nonzero_num = 0;
+
+  for (int t = 0; t < num_topics; ++t) {
+    if(document_topic_cooccurrences[t] > 0){
+		log_likelihood += LogGamma(document_topic_cooccurrences[t] + alpha_);
+		++nonzero_num;
+    }	
+  }
+
+  log_likelihood += (num_topics - nonzero_num) * LogGamma(alpha_);
+  log_likelihood -= LogGamma(document_length + alpha_ * num_topics);
+
+  return log_likelihood;
+}
+
 
 }  // namespace learning_lda
