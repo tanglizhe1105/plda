@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <fstream>
-#include <set>
 #include <vector>
 #include <sstream>
 #include <string>
@@ -37,7 +36,8 @@ int DistributelyLoadAndInitTrainingCorpus(
     int myid, int pnum, int pwnum,
     LDACorpus* corpus,
     set<string>* words,
-    set<string>* localwords) {
+    set<string>* localwords,
+    set<string>* local_word_s_cover) {
   ifstream    fin(corpus_file.c_str());
   string  line;
   int index = 0;
@@ -55,11 +55,16 @@ int DistributelyLoadAndInitTrainingCorpus(
           // Skip empty line
         istringstream   ss(line);	
         if (index % pdnum == myid) {
-		          // The document that i need to store. Randomly assign topic for word.
+		      // The document that i need to store. Randomly assign topic for word.
           DocumentWordTopicsPB document;
           string  word_s;
           int count;
           while(ss >> word_s >> count) {
+						//record word_s which is first occurred in this documet process
+						if(words->count(word_s) == 0){
+							local_word_s_cover->insert(word_s);
+						}
+						
             vector<int32>   topics;
             for (int i = 0; i < count; ++i) {
               topics.push_back(RandInt(num_topics));
@@ -69,7 +74,7 @@ int DistributelyLoadAndInitTrainingCorpus(
             words->insert(word_s);
           }
           if (document.words_size() > 0) {
-			  int documentId = index;
+			  		int documentId = index;
             corpus->push_back(new LDADocument(document, num_topics, documentId));
           }
         } else {
@@ -117,6 +122,13 @@ void InitWordPlacement(map<int,int>& word_pw_map,
   }
 }
 
+void InitLocalWordCover(set<int>* local_word_cover, set<string>& local_word_s_cover,
+	map<string, int>& local_word_index_map) {
+	for (set<string>::iterator it=local_word_s_cover.begin(); it!=local_word_s_cover.end(); ++it){
+		local_word_cover->insert(local_word_index_map[*it]);    
+	}
+}
+
 void InitWordInvertedIndex(PLDAPLUSCorpus* pldaplus_corpus) {
   list<InvertedIndex*>*   word_inverted_index = new list<InvertedIndex*>[pldaplus_corpus->num_words];
   for (list<LDADocument*>::const_iterator iter = pldaplus_corpus->corpus->begin();
@@ -157,7 +169,7 @@ char* getCurTime(char ts[]){
         time (&timep);
         struct tm* tmp = localtime(&timep);
         sprintf(ts, "%02d-%02d-%02d %02d:%02d:%02d", tmp->tm_year+1900, tmp->tm_mon+1, 
-			tmp->tm_mday, tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
+				tmp->tm_mday, tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
         return ts;
 }
 
@@ -167,6 +179,8 @@ int main(int argc, char** argv) {
   using learning_lda::LDASampler;
   using learning_lda::DistributelyLoadAndInitTrainingCorpus;
   using learning_lda::InitWordPlacement;
+	using learning_lda::InitLocalWordCover;
+	using learning_lda::InitWordInvertedIndex;
   using learning_lda::LDACmdLineFlags;
   using learning_lda::PLDAPLUSCorpus;
   using learning_lda::PLDAPLUSModelForPd;
@@ -191,7 +205,7 @@ int main(int argc, char** argv) {
   pwnum = flags.num_pw_;
 
   int num_topics = flags.num_topics_;
-  int num_words;
+  int num_words; //number of global global words
 
   // Define a communication group for pd's
   MPI_Group   MPI_GROUP_WORLD;
@@ -206,12 +220,13 @@ int main(int argc, char** argv) {
   MPI_Comm_create(MPI_COMM_WORLD, MPI_GROUP_PD, &MPI_COMM_PD);
   delete pw_ranks;
 
-  char tm[50];  //tlz
+  char tm[50];  //time string buffer
   
   srand(time(NULL));
   set<string> allwords;
   set<string> localwords;
   LDACorpus   *lda_corpus = NULL;
+	set<string> local_word_s_cover; //word which is first occurred in this document process
   if (myid >= pwnum) {
     lda_corpus = new LDACorpus;
   }
@@ -219,15 +234,15 @@ int main(int argc, char** argv) {
                                                  num_topics,
                                                  myid, pnum, flags.num_pw_,
                                                  lda_corpus,
-                                                 &allwords, &localwords), 0);
+                                                 &allwords, &localwords, &local_word_s_cover), 0);
   if (myid >= pwnum) {
-    printf("[%s] : Rank %d : num of documents = %ld\n", getCurTime(tm), myid, lda_corpus->size());  //tlz
+    printf("[%s] : Rank %d : num of documents = %ld\n", getCurTime(tm), myid, lda_corpus->size());
   }
 
   // Sort vocabulary words and give each word an int index
   vector<string>  sorted_words;
   map<string, int>    word_index_map;
-  map<int, int>   word_pw_map;
+	map<int, int>   word_pw_map;
   for (set<string>::const_iterator iter = allwords.begin();
       iter != allwords.end(); ++iter) {
     sorted_words.push_back(*iter);
@@ -245,6 +260,7 @@ int main(int argc, char** argv) {
     // Processor pd
     map<string, int>    local_word_index_map;
     map<int, int>   local_global_word_index_map;
+		set<int> local_word_cover;
     int num_local_words = 0;
     for (set<string>::const_iterator iter = localwords.begin();
         iter != localwords.end(); ++iter) {
@@ -261,37 +277,55 @@ int main(int argc, char** argv) {
     pldaplus_corpus.corpus = lda_corpus;
     pldaplus_corpus.num_words = num_local_words;
     InitWordInvertedIndex(&pldaplus_corpus);
-
+		//init local word cover
+		InitLocalWordCover(&local_word_cover, local_word_s_cover, local_word_index_map);
     PLDAPLUSModelForPd  model_pd(num_topics,
                              local_word_index_map,
                              word_pw_map,
                              local_global_word_index_map,
+                             local_word_cover,
                              pnum, pwnum);
     model_pd.ComputeAndInit(pldaplus_corpus.corpus);
-    printf("[%s] : Rank %d : Training data loaded.\n", getCurTime(tm), myid);  //tlz
+    printf("[%s] : Rank %d : Training data loaded.\n", getCurTime(tm), myid);
     MPI_Barrier(MPI_COMM_PD);
 
     // Do iteration
     PLDAPLUSSampler sampler(flags.alpha_, flags.beta_, &model_pd, NULL);
     for (int i = 0; i < flags.total_iterations_; ++i) {	  
-	  //tlz print out doc loglikelihood
-	  if(flags.compute_likelihood_ == "true"){
-	  	if(i % 1 == 0){
-			double loglikelihood_local = 0;
-      		double loglikelihood_global = 0;
-			for (LDACorpus::iterator iter = lda_corpus->begin(); iter != lda_corpus->end(); ++iter) {
-				loglikelihood_local += sampler.ComputeOneDocLLH(*iter);
-			}
-			MPI_Allreduce(&loglikelihood_local, &loglikelihood_global, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_PD);
-			if (myid == pwnum)
-		  		printf("[%s] : Rank %d : iteration %d : loglikelihood %e\n", getCurTime(tm), myid, i, loglikelihood_global);
-	  	}
+	  	if(flags.compute_likelihood_ == "true"){
+				//print out loglikelihood
+	  		if(i % 5 == 0 && i > 0){
+					//print out doc loglikelihood
+					double doc_loglikelihood_local = 0;
+      		double doc_loglikelihood_global = 0;
+					for (LDACorpus::iterator iter = lda_corpus->begin(); iter != lda_corpus->end(); ++iter) {
+						doc_loglikelihood_local += sampler.ComputeOneDocLLH(*iter);
+					}
+					MPI_Allreduce(&doc_loglikelihood_local, &doc_loglikelihood_global, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_PD);
+					if (myid == pwnum)
+		  			printf("[%s] : Rank %d : iteration %d : doc loglikelihood %e\n", getCurTime(tm), myid, i, doc_loglikelihood_global);
+
+					//print out word loglikelihood
+					double word_loglikelihood_local = 0;
+      		double word_loglikelihood_global = 0;
+					for (set<int>::iterator it=local_word_cover.begin(); it!=local_word_cover.end(); ++it)
+						word_loglikelihood_local += sampler.ComputeOneWordLLH(*it);
+					MPI_Allreduce(&word_loglikelihood_local, &word_loglikelihood_global, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_PD);
+					if (myid == pwnum)
+		  			printf("[%s] : Rank %d : iteration %d : word loglikelihood %e\n", getCurTime(tm), myid, i, word_loglikelihood_global);
+					
+					//print out normalized loglikelihood
+					if (myid == pwnum)
+		  			printf("[%s] : Rank %d : iteration %d : normalized loglikelihood %e\n", getCurTime(tm), myid, i, sampler.ComputeNormalizeWordLLH());
+					
+	  		}
 	  } //end if
 	  printf("[%s] : Rank %d : iteration %d\n", getCurTime(tm), myid, i);
-      sampler.DoIteration(&pldaplus_corpus, true, false);
+    sampler.DoIteration(&pldaplus_corpus, true, false);
+
     }
 
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     std::stringstream sout;
     sout<<"output"<<myid;
     std::ofstream out(sout.str().c_str());
@@ -312,7 +346,7 @@ int main(int argc, char** argv) {
         ++num_local_words;
       }
     }
-    printf("[%s] : Rank %d : num of words = %d\n", getCurTime(tm), myid, num_local_words);  //tlz
+    printf("[%s] : Rank %d : num of words = %d\n", getCurTime(tm), myid, num_local_words);
 
     PLDAPLUSModelForPw  model_pw(num_topics,
                              local_word_index_map,
@@ -328,7 +362,7 @@ int main(int argc, char** argv) {
     model_pw.AppendAsString(fout);
   }
 
-  printf("[%s] : Rank %d : Done\n", getCurTime(tm), myid);  //tlz
+  printf("[%s] : Rank %d : Done\n", getCurTime(tm), myid);
   MPI_Barrier(MPI_COMM_WORLD);
 
   MPI_Group_free(&MPI_GROUP_PD);

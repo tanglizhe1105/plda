@@ -10,10 +10,12 @@ PLDAPLUSSampler::PLDAPLUSSampler(
     : LDASampler(alpha, beta, model, accum_model) {
   model_pd_ = model;
   alloc_buf_ = new int64[(PLDAPLUS_MAX_POOL_SIZE + 2) * (model->num_topics())];
+	global_topic_ = new int64[model->num_topics()];
 }
 
 PLDAPLUSSampler::~PLDAPLUSSampler() {
   delete alloc_buf_;
+	delete global_topic_;
 }
 
 void PLDAPLUSSampler::SampleNewTopicForWordInDocumentWithDistributions(
@@ -80,6 +82,10 @@ void PLDAPLUSSampler::DoIteration(
   // Fetch global topic distribution only once
   model_pd_->GetGlobalTopic(global_topic);
 
+	for(int k=0; k < num_topics_t; ++k){
+			global_topic_[k] = global_topic[k];
+	}
+
   // Init fetching pool
   for(int i = 0; i < num_words_t && pool_size < PLDAPLUS_MAX_POOL_SIZE; ++i) {
     model_pd_->GetTopicWordNonblocking(i, recv_buf + pool_size * num_topics_t,
@@ -97,6 +103,7 @@ void PLDAPLUSSampler::DoIteration(
     memset(delta_topic, 0, sizeof(*delta_topic) * num_topics_t);
 
     int local_word_index = word_index_pool[request_index];
+		model_pd_->UpdateWordCoverTopic(local_word_index, topic_word);
     // Sample for word local_word_index
     for(list<InvertedIndex*>::iterator iter = pldaplus_corpus->word_inverted_index[local_word_index].begin();
         iter != pldaplus_corpus->word_inverted_index[local_word_index].end(); ++iter) {
@@ -125,6 +132,8 @@ void PLDAPLUSSampler::DoIteration(
     memset(delta_topic, 0, sizeof(*delta_topic) * num_topics_t);
 
     int local_word_index = word_index_pool[j];
+		model_pd_->UpdateWordCoverTopic(local_word_index, topic_word);
+		
     for(list<InvertedIndex*>::iterator iter = pldaplus_corpus->word_inverted_index[local_word_index].begin();
         iter != pldaplus_corpus->word_inverted_index[local_word_index].end(); ++iter) {
       SampleNewTopicForWordInDocumentWithDistributions(
@@ -142,5 +151,71 @@ void PLDAPLUSSampler::DoIteration(
   delete word_index_pool;
   delete request_pool;
 }
+
+double PLDAPLUSSampler::ComputeOneDocLLH(LDADocument* document) const {
+  const int num_topics(model_->num_topics());
+  const vector<int64>& document_topic_cooccurrences(
+    document->topic_distribution());
+  CHECK_EQ(num_topics, document_topic_cooccurrences.size());
+  
+  int64 document_length = 0;
+  for (int t = 0; t < num_topics; ++t) {
+    document_length += document_topic_cooccurrences[t];
+  }
+  if(document_length == 0)
+  	return 0.0;
+
+  double one_doc_llh = LogGamma(num_topics * alpha_) 
+		- num_topics * LogGamma(alpha_);
+  int nonzero_num = 0;
+
+  for (int t = 0; t < num_topics; ++t) {
+    if(document_topic_cooccurrences[t] > 0){
+		one_doc_llh += LogGamma(document_topic_cooccurrences[t] + alpha_);
+		++nonzero_num;
+    }	
+  }
+
+  one_doc_llh += (num_topics - nonzero_num) * LogGamma(alpha_);
+  one_doc_llh -= LogGamma(document_length + alpha_ * num_topics);
+
+  return one_doc_llh;
+}
+
+double PLDAPLUSSampler::ComputeOneWordLLH(int word) const{
+  const int num_topics(model_->num_topics());
+  const int64* word_topic_cooccurrences(
+  	model_->GetWordCoverTopic(word)); //local word NO.
+	
+	double word_llh = 0.0;
+	int nonzero_num = 0;
+	for (int t = 0; t < num_topics; ++t) {
+		if(word_topic_cooccurrences[t] > 0){
+			word_llh += LogGamma(word_topic_cooccurrences[t] + beta_);
+			++nonzero_num;
+    }	
+  }
+
+	if(nonzero_num == 0)
+		return 0.0;
+	
+	word_llh += (num_topics - nonzero_num) * LogGamma(beta_);
+  return word_llh;		
+}
+
+double PLDAPLUSSampler::ComputeNormalizeWordLLH() const{
+  const int num_topics(model_->num_topics());
+	const int num_words(model_->num_words());
+	int64* global_topic_occurrences(global_topic_);
+
+	double llh = num_topics * (LogGamma(num_words * beta_) -
+		num_words * LogGamma(beta_));
+
+	for (int t = 0; t < num_topics; ++t) {
+		llh -= LogGamma(global_topic_occurrences[t] + num_words * beta_);
+  }
+  return llh;
+}
+
 
 } // namespace learning_lda

@@ -20,6 +20,7 @@
 #include <cstring>
 #include <iostream>
 #include <list>
+#include <set>
 #include <map>
 #include <string>
 #include <vector>
@@ -122,6 +123,7 @@ typedef long long           int64;
 #endif
 
 // Frequently-used STL containers.
+using std::set;
 using std::list;
 using std::map;
 using std::string;
@@ -224,6 +226,10 @@ int GetAccumulativeSample(const vector<double>& distribution);
 
 // Steaming output facilities.
 std::ostream& operator << (std::ostream& out, vector<double>& v);
+
+
+// Define LogGamma function
+double LogGamma(double xx);
 
 }  // namespace learning_lda
 

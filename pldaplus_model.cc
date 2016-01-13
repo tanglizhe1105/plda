@@ -83,13 +83,21 @@ PLDAPLUSModelForPd::PLDAPLUSModelForPd(
     const map<string, int>& local_word_index_map,
     const map<int, int>& word_pw_map,
     const map<int, int>& local_global_word_index_map,
+    const set<int>& word_cover,
     const int pnum, const int pwnum)
     : LDAModel(num_topics, local_word_index_map) {
   word_pw_map_ = word_pw_map;
   local_global_word_index_map_ = local_global_word_index_map;
   pnum_ = pnum;
   pwnum_ = pwnum;
+	word_cover_ = word_cover;
   buf_ = new int64[num_topics];
+	word_cover_topic_ = new int64[num_topics * word_cover_.size()];
+	int i = 0;
+	for (set<int>::iterator it = word_cover_.begin(); it != word_cover_.end(); ++it){
+    word_corver_index_map_[*it] = i;
+	  ++i;
+	}
 }
 
 PLDAPLUSModelForPd::~PLDAPLUSModelForPd() {
@@ -158,5 +166,20 @@ void PLDAPLUSModelForPd::Done() {
     MPI_Send(buf_, 0, MPI_LONG_LONG, i, PLDAPLUS_TAG_DONE, MPI_COMM_WORLD);
   }
 }
+
+void PLDAPLUSModelForPd::UpdateWordCoverTopic(int word, int64* word_topic){
+	if(word_cover_.count(word) == 1){
+		int index = word_corver_index_map_[word];
+		memcpy(word_cover_topic_ + index, word_topic, num_topics());
+	}
+}
+const int64* PLDAPLUSModelForPd::GetWordCoverTopic(int word){
+	if(word_cover_.count(word) == 1){
+		int index = word_corver_index_map_[word];
+		return word_cover_topic_ + index;
+	}else
+		return 0;
+}
+
 
 }   // namespace learning_lda

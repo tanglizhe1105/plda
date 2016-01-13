@@ -14,6 +14,7 @@
 
 #include "model.h"
 
+#include <set>
 #include <map>
 #include <sstream>
 #include <string>

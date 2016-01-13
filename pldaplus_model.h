@@ -6,6 +6,7 @@
 #include "document.h"
 #include "model.h"
 
+
 #define PLDAPLUS_MAX_POOL_SIZE 100
 
 // The PLDAPLUS_TAG_xxxx facilities, which is used for packing and
@@ -49,6 +50,7 @@ class PLDAPLUSModelForPd : public LDAModel {
                  const map<string, int>& local_word_index_map,
                  const map<int, int>& word_pw_map,
                  const map<int, int>& local_global_word_index_map,
+                 const set<int>& word_cover,
                  const int pnum, const int pwnum);
   ~PLDAPLUSModelForPd();
 
@@ -67,9 +69,20 @@ class PLDAPLUSModelForPd : public LDAModel {
 
   // Inform processor pw of completion
   void Done();
-
+	
+	// Word cover means the vocabulary of corpus that divided by document model process.
+	// Each document model process possess part vocabulary and all document model process
+	// cover total vocabulary.
+	// Update local word-topic with value from word-topic modle.
+	void UpdateWordCoverTopic(int word, int64* word_topic);
+	// Get local word-topic which value from word-topic modle.
+	const int64* GetWordCoverTopic(int word);
+	
  private:
   int64*  buf_;
+	int64*	word_cover_topic_;
+	set<int> word_cover_;
+	map<int, int> word_corver_index_map_;
   map<int, int> word_pw_map_;
   map<int, int> local_global_word_index_map_;
   int pnum_, pwnum_;

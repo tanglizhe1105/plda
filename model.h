@@ -16,6 +16,7 @@
 #define _OPENSOURCE_GLDA_MODEL_H__
 
 #include <iostream>
+#include <set>
 #include <map>
 #include <string>
 #include <vector>
@@ -78,6 +79,9 @@ class LDAModel {
   // Returns the topic distribution for word.
   const TopicCountDistribution& GetWordTopicDistribution(
       int word) const;
+
+	// Wait override by doc model.
+	virtual const int64* GetWordCoverTopic(int word){return 0;}
 
   // Returns the global topic distribution.
   const TopicCountDistribution& GetGlobalTopicDistribution() const;

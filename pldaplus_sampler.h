@@ -34,8 +34,17 @@ class PLDAPLUSSampler : public LDASampler {
   void DoIteration(PLDAPLUSCorpus* pldaplus_corpus,
                    bool training_model,
                    bool burn_in);
+
+	// Computes the log likelihood of a document.
+  double ComputeOneDocLLH(LDADocument* document) const;
+  // Computes the log likelihood of a word.
+  double ComputeOneWordLLH(int word) const;
+  // Computes the log likelihood of vector of 'global' topic occurrence counts
+  double ComputeNormalizeWordLLH() const;
+	
  private:
   int64*  alloc_buf_;
+	int64*  global_topic_;
   PLDAPLUSModelForPd* model_pd_;
 };
 
