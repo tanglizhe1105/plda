@@ -170,7 +170,7 @@ void PLDAPLUSModelForPd::Done() {
 void PLDAPLUSModelForPd::UpdateWordCoverTopic(int word, int64* word_topic){
 	if(word_cover_.count(word) == 1){
 		int index = word_corver_index_map_[word];
-		memcpy(word_cover_topic_ + index, word_topic, num_topics());
+		memcpy(word_cover_topic_ + index, word_topic, sizeof(*word_topic) * num_topics());
 	}
 }
 const int64* PLDAPLUSModelForPd::GetWordCoverTopic(int word){
