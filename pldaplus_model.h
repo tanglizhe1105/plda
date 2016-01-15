@@ -33,6 +33,7 @@ class PLDAPLUSModelForPw : public LDAModel {
                  const map<int, int>& global_local_word_index_map,
                  const int pnum, const int pwnum);
   void Listen();
+	void ComputeLocalWordLlh(); //tlz
  private:
   map<int, int> word_pw_map_;
   map<int, int> global_local_word_index_map_;

@@ -46,6 +46,7 @@ void PLDAPLUSModelForPw::Listen() {
         break;
       }
       case PLDAPLUS_TAG_FETCH_GLOBAL : {
+				//ComputeLocalWordLlh(); //tlz
         if(first_flag) {
           first_flag = false;
         } else {
@@ -78,6 +79,23 @@ void PLDAPLUSModelForPw::Listen() {
   delete send_buf;
 }
 
+void PLDAPLUSModelForPw::ComputeLocalWordLlh(){ //tlz
+	double local_word_llh = 0.0;
+	for(int w=0; w < num_words(); ++w){
+		const TopicCountDistribution& word_topic = GetWordTopicDistribution(w);
+		int nonzero_num = 0;
+		for (int t = 0; t < num_topics(); ++t) {
+			if(word_topic[t] > 0){
+				local_word_llh += LogGamma(word_topic[t] + 0.01);
+				++nonzero_num;
+    	}	
+  	}
+		if(nonzero_num > 0)	
+			local_word_llh += (num_topics() - nonzero_num) * LogGamma(0.01);
+	}
+	printf("word loglikelihood %e\n", local_word_llh);
+}
+
 PLDAPLUSModelForPd::PLDAPLUSModelForPd(
     int num_topics,
     const map<string, int>& local_word_index_map,
@@ -102,6 +120,7 @@ PLDAPLUSModelForPd::PLDAPLUSModelForPd(
 
 PLDAPLUSModelForPd::~PLDAPLUSModelForPd() {
   delete buf_;
+	delete word_cover_topic_;
 }
 
 void PLDAPLUSModelForPd::ComputeAndInit(LDACorpus* corpus) {
@@ -170,13 +189,13 @@ void PLDAPLUSModelForPd::Done() {
 void PLDAPLUSModelForPd::UpdateWordCoverTopic(int word, int64* word_topic){
 	if(word_cover_.count(word) == 1){
 		int index = word_corver_index_map_[word];
-		memcpy(word_cover_topic_ + index, word_topic, sizeof(*word_topic) * num_topics());
+		memcpy(word_cover_topic_ + index * num_topics(), word_topic, sizeof(*word_topic) * num_topics());
 	}
 }
 const int64* PLDAPLUSModelForPd::GetWordCoverTopic(int word){
 	if(word_cover_.count(word) == 1){
 		int index = word_corver_index_map_[word];
-		return word_cover_topic_ + index;
+		return word_cover_topic_ + index * num_topics();
 	}else
 		return 0;
 }

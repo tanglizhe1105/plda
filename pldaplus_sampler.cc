@@ -82,9 +82,7 @@ void PLDAPLUSSampler::DoIteration(
   // Fetch global topic distribution only once
   model_pd_->GetGlobalTopic(global_topic);
 
-	for(int k=0; k < num_topics_t; ++k){
-			global_topic_[k] = global_topic[k];
-	}
+	memcpy(global_topic_, global_topic, sizeof(*global_topic) * num_topics_t);
 
   // Init fetching pool
   for(int i = 0; i < num_words_t && pool_size < PLDAPLUS_MAX_POOL_SIZE; ++i) {
@@ -186,6 +184,7 @@ double PLDAPLUSSampler::ComputeOneWordLLH(int word) const{
   const int num_topics(model_->num_topics());
   const int64* word_topic_cooccurrences(
   	model_->GetWordCoverTopic(word)); //local word NO.
+	CHECK_LT(0, (long)word_topic_cooccurrences);
 	
 	double word_llh = 0.0;
 	int nonzero_num = 0;
@@ -207,13 +206,21 @@ double PLDAPLUSSampler::ComputeNormalizeWordLLH() const{
   const int num_topics(model_->num_topics());
 	const int num_words(model_->num_words());
 	int64* global_topic_occurrences(global_topic_);
-
+	
 	double llh = num_topics * (LogGamma(num_words * beta_) -
 		num_words * LogGamma(beta_));
-
+	
+	int nonzero_num = 0;
 	for (int t = 0; t < num_topics; ++t) {
-		llh -= LogGamma(global_topic_occurrences[t] + num_words * beta_);
+		if(global_topic_occurrences[t] > 0){
+			llh -= LogGamma(global_topic_occurrences[t] + num_words * beta_);
+			++nonzero_num;
+		}
   }
+	
+	if(nonzero_num == 0)
+		return 0.0;
+	
   return llh;
 }
 

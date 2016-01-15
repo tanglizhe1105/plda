@@ -34,8 +34,8 @@ class PLDAPLUSSampler : public LDASampler {
   void DoIteration(PLDAPLUSCorpus* pldaplus_corpus,
                    bool training_model,
                    bool burn_in);
-
-	// Computes the log likelihood of a document.
+	
+  // Computes the log likelihood of a document.
   double ComputeOneDocLLH(LDADocument* document) const;
   // Computes the log likelihood of a word.
   double ComputeOneWordLLH(int word) const;
