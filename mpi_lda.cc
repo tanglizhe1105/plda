@@ -294,7 +294,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < flags.total_iterations_; ++i) {	  
 	  	if(flags.compute_likelihood_ == "true"){
 				//print out loglikelihood
-	  		if(i % 1 == 0){
+	  		if(i % 5 == 0){
 					//print out doc loglikelihood
 					double doc_loglikelihood_local = 0;
       		double doc_loglikelihood_global = 0;
